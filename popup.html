@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <div class="main-row">
+      <button id="btn-decrease" class="btn-adjust" title="Decrease speed by 0.25">−</button>
+      <div class="speed-display" id="speed-display">1.00x</div>
+      <button id="btn-increase" class="btn-adjust" title="Increase speed by 0.25">+</button>
+    </div>
+    <div class="fixed-row">
+      <button class="fixed-speed-btn" data-speed="0.25">0.25</button>
+      <button class="fixed-speed-btn" data-speed="0.5">0.5</button>
+      <button class="fixed-speed-btn" data-speed="0.75">0.75</button>
+      <button class="fixed-speed-btn" data-speed="1">1</button>
+      <button class="fixed-speed-btn" data-speed="1.5">1.5</button>
+      <button class="fixed-speed-btn" data-speed="1.75">1.75</button>
+      <button class="fixed-speed-btn" data-speed="2">2</button>
+      <button class="fixed-speed-btn" data-speed="2.5">2.5</button>
+    </div>
+    <button id="btn-exclude" class="btn-exclude">Exclude this site</button>
+    <div class="footer">
+      <a href="#" id="options-link">Exclusions...</a>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
