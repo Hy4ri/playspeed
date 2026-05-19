@@ -11,16 +11,23 @@ document.addEventListener('DOMContentLoaded', () => {
   let currentSpeed = 1.0;
   let exclusions = [];
   let currentHostname = '';
+  let settingsLoaded = false;
 
   // --- Load settings ---
   chrome.storage.local.get('speed', (result) => {
     currentSpeed = result.speed ?? 1.0;
+    settingsLoaded = true;
+    speedDisplay.classList.remove('loading');
     updateDisplay();
+    updateActiveSpeedButton();
   });
 
   // --- Get hostname and exclusion state ---
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    if (!tabs[0]?.url) return;
+    if (!tabs[0]?.url) {
+      btnExclude.style.display = 'none';
+      return;
+    }
     try {
       const url = new URL(tabs[0].url);
       currentHostname = url.hostname;
@@ -89,6 +96,14 @@ document.addEventListener('DOMContentLoaded', () => {
     speedDisplay.textContent = currentSpeed.toFixed(2) + 'x';
   }
 
+  // --- Active speed button ---
+  function updateActiveSpeedButton() {
+    fixedButtons.forEach((btn) => {
+      const speed = parseFloat(btn.dataset.speed);
+      btn.classList.toggle('active', Math.abs(speed - currentSpeed) < 0.01);
+    });
+  }
+
   // --- Apply new speed ---
   function setSpeed(newSpeed) {
     // Clamp between 0.1 and 16
@@ -96,6 +111,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Round to 2 decimal places
     currentSpeed = Math.round(currentSpeed * 100) / 100;
     updateDisplay();
+    updateActiveSpeedButton();
 
     // Persist to storage
     chrome.storage.local.set({ speed: currentSpeed });
