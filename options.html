@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="container">
+    <h1>PlaySpeed Exclusions</h1>
+    <p class="subtitle">
+      Add hostnames where PlaySpeed should <strong>not</strong> apply.
+      Videos on excluded sites will play at their normal speed.
+    </p>
+
+    <div class="add-row">
+      <input
+        type="text"
+        id="exclusion-input"
+        placeholder="e.g. youtube.com"
+        spellcheck="false"
+      />
+      <button id="btn-add">Add</button>
+    </div>
+
+    <p class="hint">
+      Matches the hostname and all its subdomains.
+      Example: <code>youtube.com</code> also covers
+      <code>www.youtube.com</code>, <code>m.youtube.com</code>, etc.
+    </p>
+
+    <ul id="exclusion-list"></ul>
+
+    <p id="empty-msg" class="empty-msg">No exclusions yet.</p>
+  </div>
+  <script src="options.js"></script>
+</body>
+</html>
