@@ -1,5 +1,24 @@
 /* PlaySpeed — Options Page Styles */
 
+:root {
+  --bg-primary:     #121212;
+  --bg-surface:     #1e1e1e;
+  --bg-surface-2:   #2c2c2c;
+  --border-default: #3c3c3c;
+  --border-hover:   #505050;
+  --border-focus:   #990000;
+  --text-primary:   #e8e8e8;
+  --text-secondary: #a8a8a8;
+  --text-muted:     #808080;
+  --accent:         #990000;
+  --accent-hover:   #bb2222;
+  --accent-active:  #770000;
+  --danger:         #ef5350;
+  --danger-bg:      rgba(239, 83, 80, 0.15);
+  --radius-sm: 6px;
+  --radius-md: 8px;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -9,8 +28,8 @@
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
     Ubuntu, Cantarell, sans-serif;
-  background: #1a1a2e;
-  color: #e0e0e0;
+  background: var(--bg-primary);
+  color: var(--text-primary);
   min-height: 100vh;
 }
 
@@ -23,16 +42,18 @@ body {
 h1 {
   font-size: 24px;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--text-primary);
   margin-bottom: 8px;
 }
 
 .subtitle {
   font-size: 14px;
-  color: #9999bb;
+  color: var(--text-secondary);
   line-height: 1.5;
   margin-bottom: 24px;
 }
+
+/* --- Add input row --- */
 
 .add-row {
   display: flex;
@@ -43,66 +64,90 @@ h1 {
 #exclusion-input {
   flex: 1;
   padding: 10px 14px;
-  border: 1px solid #3a3a5a;
-  border-radius: 8px;
-  background: #2a2a4a;
-  color: #ffffff;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  color: var(--text-primary);
   font-size: 14px;
   outline: none;
   transition: border-color 0.2s ease;
 }
 
 #exclusion-input::placeholder {
-  color: #666688;
+  color: var(--text-muted);
 }
 
 #exclusion-input:focus {
-  border-color: #6a8aff;
+  border-color: var(--border-focus);
+}
+
+#exclusion-input:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+#exclusion-input.error {
+  border-color: var(--danger);
+}
+
+#error-msg {
+  color: var(--danger);
+  font-size: 12px;
+  margin-bottom: 16px;
+  min-height: 18px;
 }
 
 #btn-add {
   padding: 10px 20px;
   border: none;
-  border-radius: 8px;
-  background: #6a8aff;
+  border-radius: var(--radius-md);
+  background: var(--accent);
   color: #ffffff;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s ease;
   white-space: nowrap;
+  height: 44px;
 }
 
 #btn-add:hover {
-  background: #5a7aee;
+  background: var(--accent-hover);
 }
 
 #btn-add:active {
-  background: #4a6add;
+  background: var(--accent-active);
+}
+
+#btn-add:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
 }
 
 .hint {
   font-size: 12px;
-  color: #7777aa;
+  color: var(--text-muted);
   margin-bottom: 24px;
   line-height: 1.4;
 }
 
 .hint code {
-  background: #2a2a4a;
+  background: var(--bg-surface-2);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: 12px;
-  color: #aaaadd;
+  color: var(--text-secondary);
 }
 
-/* Exclusion list */
+/* --- Exclusion list --- */
 
 #exclusion-list {
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+  max-height: 60vh;
+  overflow-y: auto;
 }
 
 .exclusion-item {
@@ -110,31 +155,30 @@ h1 {
   align-items: center;
   justify-content: space-between;
   padding: 10px 14px;
-  background: #2a2a4a;
-  border: 1px solid #3a3a5a;
-  border-radius: 8px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
   transition: border-color 0.15s ease;
 }
 
 .exclusion-item:hover {
-  border-color: #5a5a8a;
+  border-color: var(--border-hover);
 }
 
 .exclusion-label {
   font-size: 14px;
   font-weight: 500;
-  color: #d0d0e0;
+  color: var(--text-primary);
   word-break: break-all;
 }
 
 .btn-remove {
-  width: 28px;
-  height: 28px;
+  width: 36px;
+  height: 36px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
-  color: #ff6b6b;
-  font-size: 14px;
+  color: var(--danger);
   cursor: pointer;
   transition: all 0.15s ease;
   display: flex;
@@ -144,13 +188,21 @@ h1 {
 }
 
 .btn-remove:hover {
-  background: #ff6b6b22;
-  color: #ff4444;
+  background: var(--danger-bg);
+}
+
+.btn-remove:active {
+  background: rgba(239, 83, 80, 0.25);
+}
+
+.btn-remove:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
 }
 
 .empty-msg {
   text-align: center;
-  color: #666688;
+  color: var(--text-muted);
   font-size: 14px;
   padding: 32px 0;
 }

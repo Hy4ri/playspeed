@@ -1,5 +1,24 @@
 /* PlaySpeed — Popup Styles */
 
+:root {
+  --bg-primary:     #121212;
+  --bg-surface:     #1e1e1e;
+  --bg-surface-2:   #2c2c2c;
+  --border-default: #3c3c3c;
+  --border-hover:   #505050;
+  --border-focus:   #990000;
+  --text-primary:   #e8e8e8;
+  --text-secondary: #a8a8a8;
+  --text-muted:     #808080;
+  --accent:         #990000;
+  --accent-hover:   #bb2222;
+  --accent-active:  #770000;
+  --danger:         #ef5350;
+  --danger-bg:      rgba(239, 83, 80, 0.15);
+  --radius-sm: 6px;
+  --radius-md: 8px;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -10,8 +29,8 @@ body {
   width: 260px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
     Ubuntu, Cantarell, sans-serif;
-  background: #1a1a2e;
-  color: #e0e0e0;
+  background: var(--bg-primary);
+  color: var(--text-primary);
   user-select: none;
 }
 
@@ -23,13 +42,7 @@ body {
   gap: 12px;
 }
 
-.header {
-  font-size: 13px;
-  font-weight: 600;
-  color: #8888aa;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-}
+/* --- Main row: -  speed  + --- */
 
 .main-row {
   display: flex;
@@ -43,17 +56,22 @@ body {
   text-align: center;
   font-size: 38px;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--text-primary);
   line-height: 1;
+}
+
+.speed-display.loading {
+  color: var(--text-muted);
+  font-size: 30px;
 }
 
 .btn-adjust {
   width: 44px;
   height: 44px;
   border: none;
-  border-radius: 10px;
-  background: #2a2a4a;
-  color: #ffffff;
+  border-radius: var(--radius-md);
+  background: var(--bg-surface-2);
+  color: var(--text-primary);
   font-size: 22px;
   font-weight: 600;
   cursor: pointer;
@@ -65,12 +83,19 @@ body {
 }
 
 .btn-adjust:hover {
-  background: #3a3a6a;
+  background: #3a3a3a;
 }
 
 .btn-adjust:active {
-  background: #4a4a8a;
+  background: #444444;
 }
+
+.btn-adjust:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+/* --- Fixed speed grid --- */
 
 .fixed-row {
   display: flex;
@@ -80,12 +105,12 @@ body {
 }
 
 .fixed-speed-btn {
-  width: 42px;
-  height: 32px;
-  border: 1px solid #3a3a5a;
-  border-radius: 6px;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
   background: transparent;
-  color: #c0c0d0;
+  color: var(--text-secondary);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
@@ -93,20 +118,33 @@ body {
 }
 
 .fixed-speed-btn:hover {
-  background: #2a2a4a;
-  border-color: #5a5a8a;
-  color: #ffffff;
+  background: var(--bg-surface-2);
+  border-color: var(--border-hover);
+  color: var(--text-primary);
 }
 
 .fixed-speed-btn:active {
-  background: #3a3a6a;
+  background: #3a3a3a;
 }
+
+.fixed-speed-btn:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+.fixed-speed-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+
+/* --- Exclude toggle --- */
 
 .btn-exclude {
   width: 100%;
-  height: 36px;
+  height: 44px;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -114,46 +152,58 @@ body {
   flex-shrink: 0;
 }
 
+.btn-exclude:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
 .btn-exclude.add {
-  background: #2a5aee;
+  background: var(--accent);
   color: #ffffff;
 }
 
 .btn-exclude.add:hover {
-  background: #3a6aff;
+  background: var(--accent-hover);
 }
 
 .btn-exclude.add:active {
-  background: #1a4add;
+  background: var(--accent-active);
 }
 
 .btn-exclude.remove {
-  background: #3a1a2e;
-  color: #ff6b6b;
-  border: 1px solid #5a2a3e;
+  background: transparent;
+  color: var(--danger);
+  border: 1px solid var(--danger);
 }
 
 .btn-exclude.remove:hover {
-  background: #4a2a3e;
+  background: var(--danger-bg);
 }
 
 .btn-exclude.remove:active {
-  background: #5a2a4e;
+  background: rgba(239, 83, 80, 0.25);
 }
+
+/* --- Footer --- */
 
 .footer {
   width: 100%;
   text-align: center;
-  border-top: 1px solid #2a2a4a;
+  border-top: 1px solid var(--border-default);
   padding-top: 10px;
 }
 
 .footer a {
-  color: #6a8aff;
+  color: var(--accent);
   font-size: 12px;
   text-decoration: none;
 }
 
 .footer a:hover {
-  color: #8aaaff;
+  color: var(--accent-hover);
+}
+
+.footer a:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
 }
