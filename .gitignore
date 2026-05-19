@@ -1,0 +1,14 @@
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Build artifacts
+*.zip
+*.crx
+*.pem
+
+# Dependencies (if any in the future)
+node_modules/
