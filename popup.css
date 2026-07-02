@@ -207,3 +207,61 @@ body {
   outline: 2px solid var(--border-focus);
   outline-offset: 2px;
 }
+
+/* --- Live Override Section --- */
+
+.live-section {
+  width: 100%;
+  display: none; /* shown by JS when live is detected */
+}
+
+.live-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+}
+
+.live-status {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.btn-live-override {
+  padding: 6px 14px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-live-override:hover {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.btn-live-override.active {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.btn-live-override:active {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.btn-live-override:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}

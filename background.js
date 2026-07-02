@@ -5,7 +5,8 @@ chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === 'install') {
     chrome.storage.local.set({
       speed: 1.0,
-      exclusions: []
+      exclusions: [],
+      liveOverride: false
     });
   }
 });

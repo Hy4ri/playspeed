@@ -5,6 +5,8 @@
 // --- State ---
 let currentSpeed = 1.0;
 let excludedHostnames = [];
+let liveOverride = false;
+let ytLiveFromPageData = false; // Set by injected page bridge for YouTube
 
 // Guard against re-entrant ratechange loops
 let reapplying = false;
@@ -17,6 +19,69 @@ function isExcluded() {
   });
 }
 
+// --- Live Stream Detection ---
+function isLiveStream(video) {
+  try {
+    if (video && video.duration === Infinity) return true;
+    if (location.hostname.includes('youtube.com')) {
+      // Use page data from injected bridge (crosses isolated world boundary)
+      if (ytLiveFromPageData) return true;
+
+      const liveBadge = document.querySelector('.ytp-live-badge');
+      if (liveBadge && liveBadge.offsetParent !== null) return true;
+      const pageData = document.querySelector('ytd-watch-flexy[is-live-stream], ytd-watch-flexy[live-stream]');
+      if (pageData) return true;
+      if (location.pathname.includes('/live')) return true;
+    }
+    if (location.hostname.includes('twitch.tv') && location.pathname !== '/' && !location.pathname.startsWith('/videos/') && !location.pathname.startsWith('/clips/')) return true;
+  } catch (e) {}
+  return false;
+}
+
+function anyVideoIsLive() {
+  try {
+    const videos = document.querySelectorAll('video');
+    for (const video of videos) {
+      if (isLiveStream(video)) return true;
+    }
+  } catch (e) {}
+  return false;
+}
+
+// --- YouTube Page Data Bridge ---
+// Chrome content scripts run in an isolated world and cannot directly access
+// page-level JavaScript variables like ytInitialPlayerResponse.
+// We inject a <script> tag (with src pointing to our extension file) that
+// reads it and signals via a custom DOM event, which DOES cross the
+// isolated-world boundary. An external file is required because YouTube's
+// Content Security Policy blocks inline script execution.
+
+// Listen for bridge data posted from the page (MAIN world) script
+// postMessage reliably crosses the isolated world boundary.
+window.addEventListener('message', (e) => {
+  // Only trust messages from the same page's MAIN world script
+  if (e.origin !== window.location.origin) return;
+  if (e.data && e.data.type === 'playspeed-yt-live') {
+    ytLiveFromPageData = e.data.isLive || false;
+    applySpeedToAll(); // Re-apply now that we have live data
+  }
+});
+
+function setupYouTubeBridge() {
+  if (!location.hostname.includes('youtube.com')) return;
+
+  const script = document.createElement('script');
+  script.src = chrome.runtime.getURL('yt-bridge.js');
+  script.onload = () => {
+    script.remove();
+    // Bridge just executed, but its postMessage is queued and won't be processed
+    // until after onload returns. The message handler (below) re-applies speed
+    // with correct live data, so there's nothing to do here.
+  };
+  script.onerror = () => { script.remove(); };
+  document.documentElement.appendChild(script);
+}
+
 // --- Speed application ---
 function applySpeedToMedia(media) {
   if (isExcluded()) return;
@@ -24,9 +89,16 @@ function applySpeedToMedia(media) {
   // Only apply to <video> and <audio> elements
   if (media.nodeName !== 'VIDEO' && media.nodeName !== 'AUDIO') return;
 
-  const drift = Math.abs(media.playbackRate - currentSpeed);
+  let targetSpeed = currentSpeed;
+
+  // For live streams, default to 1.0x unless user has toggled liveOverride
+  if (media.nodeName === 'VIDEO' && isLiveStream(media) && !liveOverride) {
+    targetSpeed = 1.0;
+  }
+
+  const drift = Math.abs(media.playbackRate - targetSpeed);
   if (drift > 0.02) {
-    media.playbackRate = currentSpeed;
+    media.playbackRate = targetSpeed;
   }
 }
 
@@ -67,7 +139,12 @@ document.addEventListener(
     const target = e.target;
     if (target.nodeName === 'VIDEO' || target.nodeName === 'AUDIO') {
       reapplying = true;
-      target.playbackRate = currentSpeed;
+      // Respect live detection: live videos default to 1.0x unless overridden
+      let targetSpeed = currentSpeed;
+      if (target.nodeName === 'VIDEO' && isLiveStream(target) && !liveOverride) {
+        targetSpeed = 1.0;
+      }
+      target.playbackRate = targetSpeed;
       reapplying = false;
     }
   },
@@ -89,20 +166,31 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'getState') {
     sendResponse({ speed: currentSpeed, excluded: isExcluded() });
   }
+  if (message.type === 'liveOverrideChanged') {
+    liveOverride = message.enabled;
+    chrome.storage.local.set({ liveOverride });
+    applySpeedToAll();
+    sendResponse({ ok: true });
+  }
+  if (message.type === 'getLiveStatus') {
+    sendResponse({ isLive: anyVideoIsLive(), liveOverride, speed: currentSpeed });
+  }
   // Return true for async response (though we're sync here it's good practice)
   return true;
 });
 
 // --- Load settings from storage and listen for changes ---
 function loadSettings() {
-  chrome.storage.local.get(['speed', 'exclusions'], (result) => {
+  chrome.storage.local.get(['speed', 'exclusions', 'liveOverride'], (result) => {
     if (result.speed !== undefined) currentSpeed = result.speed;
     if (result.exclusions !== undefined) excludedHostnames = result.exclusions;
+    if (result.liveOverride !== undefined) liveOverride = result.liveOverride;
     applySpeedToAll();
   });
 }
 
 // Initial load
+setupYouTubeBridge();
 loadSettings();
 
 // React to storage changes from other contexts (e.g., options page)
@@ -116,6 +204,10 @@ chrome.storage.onChanged.addListener((changes, area) => {
   }
   if (changes.exclusions) {
     excludedHostnames = changes.exclusions.newValue;
+    changed = true;
+  }
+  if (changes.liveOverride) {
+    liveOverride = changes.liveOverride.newValue;
     changed = true;
   }
   if (changed) {
@@ -132,6 +224,9 @@ let lastUrl = location.href;
 const urlObserver = new MutationObserver(() => {
   if (location.href !== lastUrl) {
     lastUrl = location.href;
+    // Re-inject YouTube bridge for SPA navigations (e.g., clicking a live stream from search)
+    ytLiveFromPageData = false;
+    setupYouTubeBridge();
     applySpeedToAll();
   }
 });
