@@ -172,6 +172,30 @@
     }
   }
 
+  // YouTube-specific retry: YouTube's player initializes asynchronously and
+  // may reset playbackRate to 1.0 AFTER our initial application (during
+  // player init, when src is set, or when playback starts). We schedule a
+  // few re-applications with increasing delays to catch these resets.
+  // This is the key fix for "YouTube videos don't respect the default speed
+  // on page load — I have to open the popup and click again."
+  const reapplyRetries = new WeakSet();
+  function scheduleYouTubeRetries(media) {
+    if (reapplyRetries.has(media)) return;
+    reapplyRetries.add(media);
+    const delays = [250, 750, 1500, 3000];
+    for (const delay of delays) {
+      setTimeout(() => {
+        // Only re-apply if the media element is still in the DOM
+        if (media.isConnected) {
+          liveCache.delete(media);
+          applySpeedToMedia(media);
+        }
+      }, delay);
+    }
+    // Allow re-scheduling after 5s in case of SPA navigation
+    setTimeout(() => { reapplyRetries.delete(media); }, 5000);
+  }
+
   function applySpeedToAll() {
     if (isExcluded()) return;
     try {
@@ -192,12 +216,22 @@
         // Element itself is a media element
         if (node.nodeName === 'VIDEO' || node.nodeName === 'AUDIO') {
           applySpeedToMedia(node);
+          // On YouTube, schedule retries to catch player-init rate resets
+          if (node.nodeName === 'VIDEO' && location.hostname.includes('youtube.com')) {
+            scheduleYouTubeRetries(node);
+          }
           continue;
         }
         // Check subtree for media elements
         if (node.querySelectorAll) {
           try {
-            node.querySelectorAll('video, audio').forEach(applySpeedToMedia);
+            const mediaEls = node.querySelectorAll('video, audio');
+            mediaEls.forEach((media) => {
+              applySpeedToMedia(media);
+              if (media.nodeName === 'VIDEO' && location.hostname.includes('youtube.com')) {
+                scheduleYouTubeRetries(media);
+              }
+            });
           } catch (e) {
             // Some non-Element nodes can sneak in; ignore.
           }
@@ -241,19 +275,25 @@
     true // capture phase
   );
 
-  // Invalidate live cache when media metadata changes
-  document.addEventListener('loadedmetadata', (e) => {
+  // When media metadata loads or duration changes, invalidate the live cache
+  // AND re-apply speed. This is critical for YouTube, which uses MediaSource
+  // Extensions — the <video>.duration is temporarily Infinity during initial
+  // load (before MSE attaches the real duration), causing isLiveStream() to
+  // falsely return true and cap speed at 1.0x. Once the real duration arrives
+  // (durationchange fires), we must re-evaluate and apply the correct speed.
+  function reapplyOnMediaEvent(e) {
     const t = e.target;
-    if (t && (t.nodeName === 'VIDEO' || t.nodeName === 'AUDIO')) {
-      liveCache.delete(t);
-    }
-  }, true);
-  document.addEventListener('durationchange', (e) => {
-    const t = e.target;
-    if (t && (t.nodeName === 'VIDEO' || t.nodeName === 'AUDIO')) {
-      liveCache.delete(t);
-    }
-  }, true);
+    if (!t || (t.nodeName !== 'VIDEO' && t.nodeName !== 'AUDIO')) return;
+    liveCache.delete(t);
+    applySpeedToMedia(t);
+  }
+  document.addEventListener('loadedmetadata', reapplyOnMediaEvent, true);
+  document.addEventListener('durationchange', reapplyOnMediaEvent, true);
+  // Also re-apply on play/playing/canplay — YouTube's player may reset
+  // playbackRate when playback starts, after our initial application.
+  document.addEventListener('play', reapplyOnMediaEvent, true);
+  document.addEventListener('playing', reapplyOnMediaEvent, true);
+  document.addEventListener('canplay', reapplyOnMediaEvent, true);
 
   // --- Listen for messages from the popup ---
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -304,6 +344,14 @@
       settingsLoaded = true;
       applySpeedToAll();
 
+      // On YouTube, schedule retries for any existing videos — the player
+      // may not have finished initializing when we first apply speed.
+      if (location.hostname.includes('youtube.com')) {
+        try {
+          document.querySelectorAll('video').forEach(scheduleYouTubeRetries);
+        } catch (e) {}
+      }
+
       // Now that settings are loaded it's safe to inject the YouTube bridge.
       if (settingsApplyPending) {
         settingsApplyPending = false;
@@ -325,6 +373,14 @@
     liveCache = new WeakMap(); // invalidate all cached live checks
     setupYouTubeBridge();
     applySpeedToAll();
+
+    // On YouTube SPA navigation, the <video> element is often reused for the
+    // new video. Schedule retries to catch the new video's player init.
+    if (location.hostname.includes('youtube.com')) {
+      try {
+        document.querySelectorAll('video').forEach(scheduleYouTubeRetries);
+      } catch (e) {}
+    }
   }
 
   // Patch history methods to catch pushState/replaceState (the only way to
