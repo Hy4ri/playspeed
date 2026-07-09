@@ -1,22 +1,50 @@
 /* PlaySpeed — Popup Styles */
 
 :root {
+  color-scheme: light dark;
+
+  /* Dark theme (default) */
   --bg-primary:     #121212;
   --bg-surface:     #1e1e1e;
   --bg-surface-2:   #2c2c2c;
+  --bg-hover:       #3a3a3a;
+  --bg-active:      #444444;
   --border-default: #3c3c3c;
   --border-hover:   #505050;
-  --border-focus:   #990000;
+  --border-focus:   #c63838;
   --text-primary:   #e8e8e8;
   --text-secondary: #a8a8a8;
   --text-muted:     #808080;
-  --accent:         #990000;
-  --accent-hover:   #bb2222;
-  --accent-active:  #770000;
+  --accent:         #c63838;
+  --accent-hover:   #d94848;
+  --accent-active:  #a02828;
+  --accent-text:    #ff8a8a; /* lighter accent for text-on-dark to pass WCAG AA */
   --danger:         #ef5350;
   --danger-bg:      rgba(239, 83, 80, 0.15);
   --radius-sm: 6px;
   --radius-md: 8px;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg-primary:     #ffffff;
+    --bg-surface:     #f5f5f5;
+    --bg-surface-2:   #ececec;
+    --bg-hover:       #e0e0e0;
+    --bg-active:      #d6d6d6;
+    --border-default: #d4d4d4;
+    --border-hover:   #b0b0b0;
+    --border-focus:   #990000;
+    --text-primary:   #1a1a1a;
+    --text-secondary: #555555;
+    --text-muted:     #808080;
+    --accent:         #990000;
+    --accent-hover:   #bb2222;
+    --accent-active:  #770000;
+    --accent-text:    #990000; /* dark accent for text-on-light */
+    --danger:         #c62828;
+    --danger-bg:      rgba(198, 40, 40, 0.10);
+  }
 }
 
 * {
@@ -27,11 +55,15 @@
 
 body {
   width: 260px;
-  font-family: RecMonoSmCasual, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
-    Ubuntu, Cantarell, sans-serif;
+  /* RecMonoSmCasual is intentionally NOT in the stack — the font is not bundled
+     with the extension, and listing a never-loaded font is a silent failure.
+     System UI fonts give a consistent, native-feeling popup. */
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
+    Ubuntu, Cantarell, 'Helvetica Neue', sans-serif;
   background: var(--bg-primary);
   color: var(--text-primary);
   user-select: none;
+  -webkit-font-smoothing: antialiased;
 }
 
 .container {
@@ -58,11 +90,7 @@ body {
   font-weight: 700;
   color: var(--text-primary);
   line-height: 1;
-}
-
-.speed-display.loading {
-  color: var(--text-muted);
-  font-size: 30px;
+  font-variant-numeric: tabular-nums;
 }
 
 .btn-adjust {
@@ -83,11 +111,11 @@ body {
 }
 
 .btn-adjust:hover {
-  background: #3a3a3a;
+  background: var(--bg-hover);
 }
 
 .btn-adjust:active {
-  background: #444444;
+  background: var(--bg-active);
 }
 
 .btn-adjust:focus-visible {
@@ -124,7 +152,7 @@ body {
 }
 
 .fixed-speed-btn:active {
-  background: #3a3a3a;
+  background: var(--bg-hover);
 }
 
 .fixed-speed-btn:focus-visible {
@@ -193,17 +221,24 @@ body {
   padding-top: 10px;
 }
 
-.footer a {
-  color: var(--accent);
+.link-button {
+  background: none;
+  border: none;
+  padding: 4px 8px;
+  color: var(--accent-text);
   font-size: 12px;
-  text-decoration: none;
+  font-family: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  transition: color 0.15s ease;
+  border-radius: var(--radius-sm);
 }
 
-.footer a:hover {
+.link-button:hover {
   color: var(--accent-hover);
 }
 
-.footer a:focus-visible {
+.link-button:focus-visible {
   outline: 2px solid var(--border-focus);
   outline-offset: 2px;
 }
@@ -229,7 +264,7 @@ body {
 .live-status {
   font-size: 12px;
   font-weight: 600;
-  color: var(--accent);
+  color: var(--accent-text);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -239,7 +274,7 @@ body {
   border: 1px solid var(--accent);
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--accent);
+  color: var(--accent-text);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;

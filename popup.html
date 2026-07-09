@@ -2,16 +2,18 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PlaySpeed</title>
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
   <div class="container">
     <div class="main-row">
-      <button id="btn-decrease" class="btn-adjust" title="Decrease speed by 0.25">−</button>
-      <div class="speed-display" id="speed-display">--x</div>
-      <button id="btn-increase" class="btn-adjust" title="Increase speed by 0.25">+</button>
+      <button id="btn-decrease" class="btn-adjust" title="Decrease speed by 0.25" aria-label="Decrease speed by 0.25">−</button>
+      <div class="speed-display" id="speed-display" role="status" aria-live="polite" aria-atomic="true">--x</div>
+      <button id="btn-increase" class="btn-adjust" title="Increase speed by 0.25" aria-label="Increase speed by 0.25">+</button>
     </div>
-    <div class="fixed-row">
+    <div class="fixed-row" role="group" aria-label="Preset speeds">
       <button class="fixed-speed-btn" data-speed="0.25">0.25</button>
       <button class="fixed-speed-btn" data-speed="0.5">0.5</button>
       <button class="fixed-speed-btn" data-speed="0.75">0.75</button>
@@ -24,12 +26,12 @@
     <button id="btn-exclude" class="btn-exclude">Exclude this site</button>
     <div id="live-section" class="live-section" style="display: none">
       <div class="live-row">
-        <span id="live-status" class="live-status">Live</span>
+        <span id="live-status" class="live-status" role="status" aria-live="polite">Live</span>
         <button id="btn-live-override" class="btn-live-override">Override</button>
       </div>
     </div>
     <div class="footer">
-      <a href="#" id="options-link">Exclusions...</a>
+      <button id="options-link" type="button" class="link-button">Exclusions…</button>
     </div>
   </div>
   <script src="popup.js"></script>

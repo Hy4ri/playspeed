@@ -1,22 +1,48 @@
 /* PlaySpeed — Options Page Styles */
 
 :root {
+  color-scheme: light dark;
+
+  /* Dark theme (default) */
   --bg-primary:     #121212;
   --bg-surface:     #1e1e1e;
   --bg-surface-2:   #2c2c2c;
+  --bg-hover:       #3a3a3a;
   --border-default: #3c3c3c;
   --border-hover:   #505050;
-  --border-focus:   #990000;
+  --border-focus:   #c63838;
   --text-primary:   #e8e8e8;
   --text-secondary: #a8a8a8;
   --text-muted:     #808080;
-  --accent:         #990000;
-  --accent-hover:   #bb2222;
-  --accent-active:  #770000;
+  --accent:         #c63838;
+  --accent-hover:   #d94848;
+  --accent-active:  #a02828;
+  --accent-text:    #ff8a8a;
   --danger:         #ef5350;
   --danger-bg:      rgba(239, 83, 80, 0.15);
   --radius-sm: 6px;
   --radius-md: 8px;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg-primary:     #ffffff;
+    --bg-surface:     #f5f5f5;
+    --bg-surface-2:   #ececec;
+    --bg-hover:       #e0e0e0;
+    --border-default: #d4d4d4;
+    --border-hover:   #b0b0b0;
+    --border-focus:   #990000;
+    --text-primary:   #1a1a1a;
+    --text-secondary: #555555;
+    --text-muted:     #808080;
+    --accent:         #990000;
+    --accent-hover:   #bb2222;
+    --accent-active:  #770000;
+    --accent-text:    #990000;
+    --danger:         #c62828;
+    --danger-bg:      rgba(198, 40, 40, 0.10);
+  }
 }
 
 * {
@@ -26,11 +52,13 @@
 }
 
 body {
-  font-family: RecMonoSmCasual, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
-    Ubuntu, Cantarell, sans-serif;
+  /* RecMonoSmCasual intentionally NOT in stack — font not bundled (silent fallback bug). */
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
+    Ubuntu, Cantarell, 'Helvetica Neue', sans-serif;
   background: var(--bg-primary);
   color: var(--text-primary);
   min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
 }
 
 .container {
@@ -69,6 +97,7 @@ h1 {
   background: var(--bg-surface);
   color: var(--text-primary);
   font-size: 14px;
+  font-family: inherit;
   outline: none;
   transition: border-color 0.2s ease;
 }
@@ -105,6 +134,7 @@ h1 {
   color: #ffffff;
   font-size: 14px;
   font-weight: 600;
+  font-family: inherit;
   cursor: pointer;
   transition: background 0.15s ease;
   white-space: nowrap;
@@ -137,6 +167,45 @@ h1 {
   border-radius: var(--radius-sm);
   font-size: 12px;
   color: var(--text-secondary);
+}
+
+/* --- List header --- */
+
+.list-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  gap: 12px;
+}
+
+.list-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.btn-clear-all {
+  background: none;
+  border: none;
+  padding: 4px 8px;
+  color: var(--danger);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background 0.15s ease;
+}
+
+.btn-clear-all:hover {
+  background: var(--danger-bg);
+}
+
+.btn-clear-all:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
 }
 
 /* --- Exclusion list --- */

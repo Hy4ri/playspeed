@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PlaySpeed — Exclusions</title>
   <link rel="stylesheet" href="options.css">
 </head>
 <body>
@@ -19,10 +20,11 @@
         id="exclusion-input"
         placeholder="e.g. youtube.com"
         spellcheck="false"
+        autocomplete="off"
       />
       <button id="btn-add">Add</button>
     </div>
-    <p id="error-msg"></p>
+    <p id="error-msg" role="alert" aria-live="polite"></p>
 
     <p class="hint">
       Matches the hostname and all its subdomains.
@@ -30,6 +32,10 @@
       <code>www.youtube.com</code>, <code>m.youtube.com</code>, etc.
     </p>
 
+    <div class="list-header">
+      <h2 class="list-title">Excluded sites</h2>
+      <button id="btn-clear-all" class="btn-clear-all" type="button" style="display: none">Clear all</button>
+    </div>
     <ul id="exclusion-list"></ul>
 
     <p id="empty-msg" class="empty-msg">No exclusions yet.</p>

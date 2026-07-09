@@ -14,57 +14,101 @@ document.addEventListener('DOMContentLoaded', () => {
   let currentSpeed = 1.0;
   let exclusions = [];
   let currentHostname = '';
-  let settingsLoaded = false;
   let isLive = false;
   let liveOverride = false;
 
+  function formatSpeed(speed) {
+    // Drop trailing zeros for cleaner display (1.00 -> 1, 1.50 -> 1.5, 1.75 -> 1.75)
+    const rounded = Math.round(speed * 100) / 100;
+    return Number(rounded.toFixed(2)).toString() + 'x';
+  }
+
   // --- Load settings ---
   chrome.storage.local.get('speed', (result) => {
-    currentSpeed = result.speed ?? 1.0;
-    settingsLoaded = true;
-    speedDisplay.classList.remove('loading');
+    if (chrome.runtime.lastError) {
+      console.warn('[PlaySpeed] storage.get speed:', chrome.runtime.lastError);
+    }
+    currentSpeed = (typeof result.speed === 'number') ? result.speed : 1.0;
     updateDisplay();
     updateActiveSpeedButton();
+    updateLiveUI();
   });
 
   // --- Get hostname and exclusion state ---
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    if (!tabs[0]?.url) {
+    if (chrome.runtime.lastError) {
+      console.warn('[PlaySpeed] tabs.query:', chrome.runtime.lastError);
       btnExclude.style.display = 'none';
       return;
     }
+    const tab = tabs[0];
+    if (!tab || !tab.url) {
+      btnExclude.style.display = 'none';
+      return;
+    }
+
+    let url;
     try {
-      const url = new URL(tabs[0].url);
-      currentHostname = url.hostname;
-      // Strip www. prefix for broad subdomain coverage
-      if (currentHostname.startsWith('www.')) {
-        currentHostname = currentHostname.slice(4);
-      }
+      url = new URL(tab.url);
     } catch {
       btnExclude.style.display = 'none';
       return;
     }
 
+    // Only show exclude button on http(s) pages
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      btnExclude.style.display = 'none';
+      return;
+    }
+
+    currentHostname = url.hostname;
+    // Strip www. prefix for broad subdomain coverage
+    if (currentHostname.startsWith('www.')) {
+      currentHostname = currentHostname.slice(4);
+    }
+
     chrome.storage.local.get('exclusions', (result) => {
-      exclusions = result.exclusions || [];
+      if (chrome.runtime.lastError) {
+        console.warn('[PlaySpeed] storage.get exclusions:', chrome.runtime.lastError);
+      }
+      exclusions = Array.isArray(result.exclusions) ? result.exclusions : [];
       updateExcludeButton();
     });
 
     // Query content script for live status
-    chrome.tabs.sendMessage(tabs[0].id, { type: 'getLiveStatus' })
+    chrome.tabs.sendMessage(tab.id, { type: 'getLiveStatus' })
       .then((response) => {
-        isLive = response.isLive || false;
-        liveOverride = response.liveOverride || false;
+        if (!response) return;
+        isLive = !!response.isLive;
+        liveOverride = !!response.liveOverride;
         updateLiveUI();
       })
-      .catch(() => {});
+      .catch(() => {
+        // Content script not available (e.g., chrome:// pages, store pages).
+        // Live UI simply stays hidden.
+      });
   });
 
-  // Note: liveOverride is NOT loaded from storage here — the content script
-  // response (above) is authoritative since it reflects the active tab's state.
-  // currentSpeed is intentionally NOT sourced from this response — it creates
-  // a race where the response can overwrite the user's speed choice if they
-  // click a button before the round-trip completes.
+  // --- Storage change listener: keeps popup in sync with content script ---
+  // This is needed because the content script may update liveOverride through
+  // the options page or another tab.
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local') return;
+    if (changes.liveOverride) {
+      liveOverride = !!changes.liveOverride.newValue;
+      updateLiveUI();
+    }
+    if (changes.speed) {
+      currentSpeed = changes.speed.newValue;
+      updateDisplay();
+      updateActiveSpeedButton();
+      updateLiveUI();
+    }
+    if (changes.exclusions) {
+      exclusions = Array.isArray(changes.exclusions.newValue) ? changes.exclusions.newValue : [];
+      updateExcludeButton();
+    }
+  });
 
   function isCurrentlyExcluded() {
     return exclusions.some((pattern) => {
@@ -90,11 +134,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     liveSection.style.display = 'block';
     if (liveOverride) {
-      liveStatus.textContent = 'Live: ' + currentSpeed.toFixed(2) + 'x';
+      liveStatus.textContent = 'Live: ' + formatSpeed(currentSpeed);
       btnLiveOverride.textContent = 'Revert';
       btnLiveOverride.classList.add('active');
     } else {
-      liveStatus.textContent = 'Live: 1.00x';
+      liveStatus.textContent = 'Live: 1x';
       btnLiveOverride.textContent = 'Override';
       btnLiveOverride.classList.remove('active');
     }
@@ -116,13 +160,18 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     chrome.storage.local.set({ exclusions }, () => {
-      // Notify content script to re-evaluate immediately
+      if (chrome.runtime.lastError) {
+        console.warn('[PlaySpeed] storage.set exclusions:', chrome.runtime.lastError);
+      }
+      // Notify content script to re-evaluate immediately. Storage.onChanged
+      // will also fire, but the message gives near-instant feedback.
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (tabs[0]?.id) {
-          chrome.tabs
-            .sendMessage(tabs[0].id, { type: 'updateExclusions', exclusions })
-            .catch(() => {});
-        }
+        if (chrome.runtime.lastError) return;
+        const tab = tabs[0];
+        if (!tab || !tab.id) return;
+        chrome.tabs
+          .sendMessage(tab.id, { type: 'updateExclusions', exclusions })
+          .catch(() => {});
       });
       updateExcludeButton();
     });
@@ -130,7 +179,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- Display ---
   function updateDisplay() {
-    speedDisplay.textContent = currentSpeed.toFixed(2) + 'x';
+    speedDisplay.textContent = formatSpeed(currentSpeed);
   }
 
   // --- Active speed button ---
@@ -150,16 +199,18 @@ document.addEventListener('DOMContentLoaded', () => {
     updateDisplay();
     updateActiveSpeedButton();
 
-    // Persist to storage
+    // Persist to storage — content script will react via storage.onChanged.
     chrome.storage.local.set({ speed: currentSpeed });
 
-    // Notify the active tab's content script immediately
+    // Also send a direct message for immediate feedback (no storage round-trip).
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      if (!tabs[0]?.id) return;
+      if (chrome.runtime.lastError) return;
+      const tab = tabs[0];
+      if (!tab || !tab.id) return;
       chrome.tabs
-        .sendMessage(tabs[0].id, { type: 'speedChanged', speed: currentSpeed })
+        .sendMessage(tab.id, { type: 'speedChanged', speed: currentSpeed })
         .catch(() => {
-          /* content script not available */
+          /* content script not available (chrome:// pages, etc.) */
         });
     });
 
@@ -171,14 +222,16 @@ document.addEventListener('DOMContentLoaded', () => {
   btnLiveOverride.addEventListener('click', () => {
     liveOverride = !liveOverride;
 
-    // Persist to storage
+    // Persist to storage (popup is the single writer for liveOverride)
     chrome.storage.local.set({ liveOverride });
 
     // Notify the active tab's content script
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      if (!tabs[0]?.id) return;
+      if (chrome.runtime.lastError) return;
+      const tab = tabs[0];
+      if (!tab || !tab.id) return;
       chrome.tabs
-        .sendMessage(tabs[0].id, { type: 'liveOverrideChanged', enabled: liveOverride })
+        .sendMessage(tab.id, { type: 'liveOverrideChanged', enabled: liveOverride })
         .catch(() => {
           /* content script not available */
         });
@@ -196,6 +249,41 @@ document.addEventListener('DOMContentLoaded', () => {
       const speed = parseFloat(btn.dataset.speed);
       setSpeed(speed);
     });
+  });
+
+  // --- Keyboard shortcuts ---
+  document.addEventListener('keydown', (e) => {
+    // Ignore if focus is in the exclude input (if any) — none currently, but defensive.
+    if (e.target && e.target.tagName === 'INPUT') return;
+
+    switch (e.key) {
+      case 'ArrowUp':
+      case '+':
+      case '=':
+        e.preventDefault();
+        setSpeed(currentSpeed + 0.25);
+        break;
+      case 'ArrowDown':
+      case '-':
+      case '_':
+        e.preventDefault();
+        setSpeed(currentSpeed - 0.25);
+        break;
+      case 'ArrowRight':
+        e.preventDefault();
+        setSpeed(currentSpeed + 1);
+        break;
+      case 'ArrowLeft':
+        e.preventDefault();
+        setSpeed(currentSpeed - 1);
+        break;
+      case '0':
+        e.preventDefault();
+        setSpeed(1);
+        break;
+      default:
+        break;
+    }
   });
 
   // Open options page
