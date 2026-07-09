@@ -11,8 +11,6 @@
   // third-party page script.
   var token = '';
   try {
-    // Method 1: URL query string (most reliable for dynamically-inserted
-    // external scripts)
     var currentScript = document.currentScript;
     if (currentScript && currentScript.src) {
       var qIdx = currentScript.src.indexOf('?');
@@ -21,19 +19,20 @@
         token = params.get('t') || '';
       }
     }
-    // Method 2: data attribute fallback
     if (!token && currentScript && currentScript.dataset) {
       token = currentScript.dataset.psToken || '';
     }
   } catch (e) {}
 
-  function send(isLive) {
-    // Use window.location.origin as the targetOrigin instead of '*' — this
-    // prevents the message from leaking to a parent/child frame if the page
-    // is ever embedded.
+  function send(isLive, isPremiere) {
     try {
       window.postMessage(
-        { type: 'playspeed-yt-live', isLive: !!isLive, token: token },
+        {
+          type: 'playspeed-yt-live',
+          isLive: !!isLive,
+          isPremiere: !!isPremiere,
+          token: token
+        },
         window.location.origin
       );
     } catch (e) {}
@@ -41,14 +40,38 @@
 
   try {
     var data = window.ytInitialPlayerResponse;
-    // Only check videoDetails.isLive / isLiveDvrEnabled — these are
-    // the authoritative live indicators. The liveStreamability property
-    // can appear on non-live videos (false positives), so we skip it.
-    var isLive = !!(data && data.videoDetails && (
-      data.videoDetails.isLive === true || data.videoDetails.isLiveDvrEnabled === true
-    ));
-    send(isLive);
+    if (!data || !data.videoDetails) {
+      send(false, false);
+      return;
+    }
+
+    var vd = data.videoDetails;
+    // isLive: stream is currently broadcasting
+    // isLiveDvrEnabled: live DVR (can seek behind live edge)
+    // isPremiere: scheduled premiere — starts as VOD countdown, becomes live
+    //             at scheduled time, then becomes VOD again after ending.
+    var isLive = !!(vd.isLive === true || vd.isLiveDvrEnabled === true);
+    var isPremiere = !!vd.isPremiere;
+
+    // Premiere that has gone live: treat as live so speed is capped.
+    // We can detect this via the playability status or duration.
+    if (isPremiere && !isLive) {
+      // Check if the premiere is currently in its live phase by looking at
+      // the streamingData — premieres in live phase have live stream data.
+      try {
+        if (data.streamingData && data.streamingData.dashManifestUrl) {
+          // DASH manifest with "live" in the URL indicates live phase
+          var dashUrl = data.streamingData.dashManifestUrl;
+          if (dashUrl.indexOf('/manifest/') !== -1 &&
+              (dashUrl.indexOf('live') !== -1 || dashUrl.indexOf('oc=') !== -1)) {
+            isLive = true;
+          }
+        }
+      } catch (e) {}
+    }
+
+    send(isLive, isPremiere);
   } catch(e) {
-    send(false);
+    send(false, false);
   }
 })();

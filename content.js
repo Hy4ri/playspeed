@@ -10,6 +10,7 @@
   let excludedHostnames = [];
   let liveOverride = false;
   let ytLiveFromPageData = false; // Set by injected page bridge for YouTube
+  let ytPremiereFromPageData = false;
   let settingsLoaded = false;
   let settingsApplyPending = false;
 
@@ -17,9 +18,11 @@
   // Without this, any page script could spoof `playspeed-yt-live` messages.
   const BRIDGE_TOKEN = 'ps-' + Math.random().toString(36).slice(2) + '-' + Date.now().toString(36);
 
-  // Cache for isLiveStream results per media element, invalidated on
-  // durationchange / loadedmetadata so we don't run querySelector on every call.
+  // Cache for isLiveStream results per media element.
+  // On YouTube, entries expire after LIVE_CACHE_TTL_MS so that premieres
+  // and transitioning live streams are re-evaluated.
   let liveCache = new WeakMap();
+  const LIVE_CACHE_TTL_MS = 5000;
 
   // --- Exclusion check ---
   function isExcluded() {
@@ -38,27 +41,51 @@
   function isLiveStream(video) {
     if (!video) return false;
 
+    // Check cache (with TTL on YouTube)
     const cached = liveCache.get(video);
-    if (cached !== undefined) return cached;
+    if (cached !== undefined) {
+      if (!Array.isArray(cached)) return cached;
+      // cached is [result, expiresAt]
+      if (Date.now() < cached[1]) return cached[0];
+    }
 
     let result = false;
     try {
-      if (video.duration === Infinity) {
-        // Most reliable signal across sites, but not perfect (some sites use
-        // Infinity for non-live content). Combined with site-specific checks.
-        result = true;
-      }
-      if (!result && location.hostname.includes('youtube.com')) {
+      // Site-specific checks first (more reliable than duration alone)
+      if (location.hostname.includes('youtube.com')) {
         // Use page data from injected bridge (crosses isolated world boundary)
         if (ytLiveFromPageData) {
           result = true;
-        } else {
+        }
+        // Premiere videos that have gone live also count as live
+        if (ytPremiereFromPageData && video.duration === Infinity) {
+          result = true;
+        }
+        if (!result) {
+          // .ytp-live is YouTube's authoritative live indicator class on the
+          // player container. More reliable than .ytp-live-badge (which can
+          // persist in DOM after a stream ends).
+          const player = video.closest('.html5-video-player') || video.closest('ytd-watch-flexy');
+          if (player && player.classList.contains('ytp-live')) {
+            result = true;
+          }
+        }
+        if (!result) {
           const liveBadge = video.closest('ytd-watch-flexy')?.querySelector('.ytp-live-badge');
           if (liveBadge && liveBadge.offsetParent !== null) result = true;
           const pageData = document.querySelector('ytd-watch-flexy[is-live-stream], ytd-watch-flexy[live-stream]');
           if (pageData) result = true;
           if (location.pathname.includes('/live')) result = true;
         }
+      }
+      // duration === Infinity is the universal signal, but on YouTube we
+      // already checked it via ytLiveFromPageData + premiere logic above.
+      // Only use it as a fallback if site checks failed (e.g., bridge not
+      // yet loaded). Be more conservative: require duration to be Infinity
+      // AND the video to have started playing (readyState >= 2) to avoid
+      // the MSE-initial-load false positive we fixed earlier.
+      if (!result && video.duration === Infinity && video.readyState >= 2) {
+        result = true;
       }
       if (!result && location.hostname.includes('twitch.tv')) {
         // Only treat as live when actually on a channel page (not /directory,
@@ -84,8 +111,32 @@
       console.warn('[PlaySpeed] isLiveStream error:', e);
     }
 
-    liveCache.set(video, result);
+    // Cache: on YouTube use TTL (live status can change), elsewhere cache forever
+    if (location.hostname.includes('youtube.com')) {
+      liveCache.set(video, [result, Date.now() + LIVE_CACHE_TTL_MS]);
+    } else {
+      liveCache.set(video, result);
+    }
     return result;
+  }
+
+  function getStreamInfo() {
+    // Returns { isLive, isPremiere, streamType } for the popup
+    try {
+      const videos = document.querySelectorAll('video');
+      for (const video of videos) {
+        if (isLiveStream(video)) {
+          let streamType = 'live';
+          if (location.hostname.includes('youtube.com') && ytPremiereFromPageData) {
+            streamType = 'premiere';
+          }
+          return { isLive: true, isPremiere: ytPremiereFromPageData, streamType };
+        }
+      }
+    } catch (e) {
+      console.warn('[PlaySpeed] getStreamInfo error:', e);
+    }
+    return { isLive: false, isPremiere: false, streamType: null };
   }
 
   function anyVideoIsLive() {
@@ -116,6 +167,9 @@
     // Auth token: prevents spoofing by third-party page scripts
     if (e.data.token !== BRIDGE_TOKEN) return;
     ytLiveFromPageData = !!e.data.isLive;
+    ytPremiereFromPageData = !!e.data.isPremiere;
+    // Invalidate all live cache entries so re-evaluation uses fresh data
+    liveCache = new WeakMap();
     applySpeedToAll();
   });
 
@@ -147,6 +201,28 @@
       console.warn('[PlaySpeed] yt-bridge.js failed to load — YouTube live detection may be unreliable (CSP?).');
     };
     root.appendChild(script);
+  }
+
+  // Bridge retry: ytInitialPlayerResponse may not be ready on first inject
+  // (especially on SPA navigations). Re-inject with delays to catch updates.
+  function scheduleYouTubeBridgeRetries() {
+    if (!location.hostname.includes('youtube.com')) return;
+    const delays = [500, 1500, 3000, 6000];
+    for (const delay of delays) {
+      setTimeout(() => {
+        setupYouTubeBridge();
+      }, delay);
+    }
+    // Ongoing periodic re-check every 10s — premieres can transition from
+    // VOD → live → VOD, and we want to catch these changes.
+    if (!window.__psBridgeInterval) {
+      window.__psBridgeInterval = true;
+      setInterval(() => {
+        if (location.hostname.includes('youtube.com')) {
+          setupYouTubeBridge();
+        }
+      }, 10000);
+    }
   }
 
   // --- Speed application ---
@@ -248,6 +324,42 @@
   }
   startObserver();
 
+  // --- YouTube player attribute observer ---
+  // Watch ytd-watch-flexy for attribute changes (is-live-stream, live-stream)
+  // to catch live status transitions without waiting for the bridge poll.
+  const ytPlayerObserver = new MutationObserver((mutations) => {
+    let needsReapply = false;
+    for (const mutation of mutations) {
+      if (mutation.type === 'attributes' &&
+          (mutation.attributeName === 'is-live-stream' ||
+           mutation.attributeName === 'live-stream')) {
+        needsReapply = true;
+      }
+    }
+    if (needsReapply) {
+      liveCache = new WeakMap();
+      applySpeedToAll();
+    }
+  });
+
+  function startYouTubePlayerObserver() {
+    if (!location.hostname.includes('youtube.com')) return;
+    const tryStart = () => {
+      const watchFlexy = document.querySelector('ytd-watch-flexy');
+      if (watchFlexy) {
+        ytPlayerObserver.observe(watchFlexy, {
+          attributes: true,
+          attributeFilter: ['is-live-stream', 'live-stream'],
+        });
+      } else {
+        // Watch flexy not yet in DOM — retry shortly
+        setTimeout(tryStart, 1000);
+      }
+    };
+    tryStart();
+  }
+  startYouTubePlayerObserver();
+
   // --- ratechange event: re-apply if site or user overrides speed ---
   // Use the same drift check as applySpeedToMedia to avoid loops and
   // to be tolerant of async ratechange dispatch.
@@ -323,7 +435,29 @@
       return false;
     }
     if (message.type === 'getLiveStatus') {
-      sendResponse({ isLive: anyVideoIsLive(), liveOverride, speed: currentSpeed });
+      const info = getStreamInfo();
+      sendResponse({
+        isLive: info.isLive,
+        isPremiere: info.isPremiere,
+        streamType: info.streamType,
+        liveOverride,
+        speed: currentSpeed
+      });
+      return false;
+    }
+    // 'refreshLiveStatus' — popup asks content script to re-check live status
+    // (re-inject bridge, invalidate cache). Useful when popup reopens.
+    if (message.type === 'refreshLiveStatus') {
+      liveCache = new WeakMap();
+      setupYouTubeBridge();
+      const info = getStreamInfo();
+      sendResponse({
+        isLive: info.isLive,
+        isPremiere: info.isPremiere,
+        streamType: info.streamType,
+        liveOverride,
+        speed: currentSpeed
+      });
       return false;
     }
     // Unrecognized message type — return false so Chrome closes the channel
@@ -350,6 +484,8 @@
         try {
           document.querySelectorAll('video').forEach(scheduleYouTubeRetries);
         } catch (e) {}
+        // Schedule bridge retries to catch ytInitialPlayerResponse updates
+        scheduleYouTubeBridgeRetries();
       }
 
       // Now that settings are loaded it's safe to inject the YouTube bridge.
@@ -370,6 +506,7 @@
     if (location.href === lastUrl) return;
     lastUrl = location.href;
     ytLiveFromPageData = false;
+    ytPremiereFromPageData = false;
     liveCache = new WeakMap(); // invalidate all cached live checks
     setupYouTubeBridge();
     applySpeedToAll();
@@ -380,6 +517,9 @@
       try {
         document.querySelectorAll('video').forEach(scheduleYouTubeRetries);
       } catch (e) {}
+      scheduleYouTubeBridgeRetries();
+      // Re-attach player attribute observer for the new page
+      startYouTubePlayerObserver();
     }
   }
 

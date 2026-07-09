@@ -7,15 +7,23 @@ document.addEventListener('DOMContentLoaded', () => {
   const fixedButtons = document.querySelectorAll('.fixed-speed-btn');
   const btnExclude = document.getElementById('btn-exclude');
   const optionsLink = document.getElementById('options-link');
-  const btnLiveOverride = document.getElementById('btn-live-override');
+  // Live section elements
   const liveSection = document.getElementById('live-section');
-  const liveStatus = document.getElementById('live-status');
+  const liveLabel = document.getElementById('live-label');
+  const liveNowSpeed = document.getElementById('live-now-speed');
+  const liveHint = document.getElementById('live-hint');
+  const btnLiveOverride = document.getElementById('btn-live-override');
+  const btnLiveOverrideText = btnLiveOverride.querySelector('.btn-live-override-text');
 
   let currentSpeed = 1.0;
   let exclusions = [];
   let currentHostname = '';
   let isLive = false;
+  let isPremiere = false;
+  let streamType = null;
   let liveOverride = false;
+  let activeTabId = null;
+  let liveRefreshInterval = null;
 
   function formatSpeed(speed) {
     // Drop trailing zeros for cleaner display (1.00 -> 1, 1.50 -> 1.5, 1.75 -> 1.75)
@@ -67,6 +75,8 @@ document.addEventListener('DOMContentLoaded', () => {
       currentHostname = currentHostname.slice(4);
     }
 
+    activeTabId = tab.id;
+
     chrome.storage.local.get('exclusions', (result) => {
       if (chrome.runtime.lastError) {
         console.warn('[PlaySpeed] storage.get exclusions:', chrome.runtime.lastError);
@@ -75,23 +85,56 @@ document.addEventListener('DOMContentLoaded', () => {
       updateExcludeButton();
     });
 
-    // Query content script for live status
-    chrome.tabs.sendMessage(tab.id, { type: 'getLiveStatus' })
-      .then((response) => {
-        if (!response) return;
-        isLive = !!response.isLive;
-        liveOverride = !!response.liveOverride;
-        updateLiveUI();
-      })
-      .catch(() => {
-        // Content script not available (e.g., chrome:// pages, store pages).
-        // Live UI simply stays hidden.
-      });
+    // Initial live status query
+    refreshLiveStatus();
+
+    // Periodically refresh live status while popup is open.
+    // Premieres can transition VOD → live → VOD; we want to catch these.
+    liveRefreshInterval = setInterval(refreshLiveStatus, 2000);
   });
 
-  // --- Storage change listener: keeps popup in sync with content script ---
-  // This is needed because the content script may update liveOverride through
-  // the options page or another tab.
+  // Query content script for fresh live status. Sends 'refreshLiveStatus'
+  // so the content script re-injects the bridge and invalidates its cache.
+  function refreshLiveStatus() {
+    if (!activeTabId) return;
+    chrome.tabs.sendMessage(activeTabId, { type: 'refreshLiveStatus' })
+      .then((response) => {
+        if (!response) {
+          // Fall back to getLiveStatus if refreshLiveStatus not supported
+          return chrome.tabs.sendMessage(activeTabId, { type: 'getLiveStatus' });
+        }
+        return response;
+      })
+      .then((response) => {
+        if (!response) return;
+        const wasLive = isLive;
+        isLive = !!response.isLive;
+        isPremiere = !!response.isPremiere;
+        streamType = response.streamType || null;
+        liveOverride = !!response.liveOverride;
+        if (wasLive !== isLive) {
+          // Live status changed — update UI immediately
+          updateLiveUI();
+        } else {
+          // Just refresh the labels (speed may have changed)
+          updateLiveLabels();
+        }
+      })
+      .catch(() => {
+        // Content script not available
+        if (isLive) {
+          isLive = false;
+          updateLiveUI();
+        }
+      });
+  }
+
+  // Cleanup interval when popup closes
+  window.addEventListener('beforeunload', () => {
+    if (liveRefreshInterval) clearInterval(liveRefreshInterval);
+  });
+
+  // --- Storage change listener ---
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
     if (changes.liveOverride) {
@@ -129,18 +172,39 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function updateLiveUI() {
     if (!isLive) {
-      liveSection.style.display = 'none';
+      liveSection.classList.remove('is-live');
       return;
     }
-    liveSection.style.display = 'block';
-    if (liveOverride) {
-      liveStatus.textContent = 'Live: ' + formatSpeed(currentSpeed);
-      btnLiveOverride.textContent = 'Revert';
-      btnLiveOverride.classList.add('active');
+    liveSection.classList.add('is-live');
+    updateLiveLabels();
+  }
+
+  function updateLiveLabels() {
+    if (!isLive) return;
+
+    // Header label
+    if (streamType === 'premiere' || isPremiere) {
+      liveLabel.textContent = 'Premiere (live phase)';
     } else {
-      liveStatus.textContent = 'Live: 1x';
-      btnLiveOverride.textContent = 'Override';
+      liveLabel.textContent = 'Live stream detected';
+    }
+
+    // "Now" speed display
+    const nowSpeed = liveOverride ? currentSpeed : 1.0;
+    liveNowSpeed.textContent = formatSpeed(nowSpeed);
+    liveNowSpeed.classList.toggle('overridden', liveOverride);
+
+    // Button text and state
+    if (liveOverride) {
+      btnLiveOverrideText.textContent = 'Revert to 1x';
+      btnLiveOverride.classList.add('active');
+      btnLiveOverride.setAttribute('aria-pressed', 'true');
+      liveHint.textContent = 'Override is on — your speed is applied to this live stream.';
+    } else {
+      btnLiveOverrideText.textContent = 'Override to ' + formatSpeed(currentSpeed);
       btnLiveOverride.classList.remove('active');
+      btnLiveOverride.setAttribute('aria-pressed', 'false');
+      liveHint.textContent = 'Live streams default to 1x to keep you in sync. Click override to apply your speed.';
     }
   }
 
@@ -280,6 +344,14 @@ document.addEventListener('DOMContentLoaded', () => {
       case '0':
         e.preventDefault();
         setSpeed(1);
+        break;
+      // 'o' or 'O' to toggle live override
+      case 'o':
+      case 'O':
+        if (isLive) {
+          e.preventDefault();
+          btnLiveOverride.click();
+        }
         break;
       default:
         break;

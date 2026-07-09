@@ -25,10 +25,20 @@
     </div>
     <button id="btn-exclude" class="btn-exclude">Exclude this site</button>
     <div id="live-section" class="live-section" style="display: none">
-      <div class="live-row">
-        <span id="live-status" class="live-status" role="status" aria-live="polite">Live</span>
-        <button id="btn-live-override" class="btn-live-override">Override</button>
+      <div class="live-header">
+        <span class="live-dot" aria-hidden="true"></span>
+        <span id="live-label" class="live-label" role="status" aria-live="polite">Live stream detected</span>
       </div>
+      <div class="live-body">
+        <div class="live-now">
+          <span class="live-now-label">Now</span>
+          <span id="live-now-speed" class="live-now-speed">1x</span>
+        </div>
+        <button id="btn-live-override" class="btn-live-override" aria-pressed="false">
+          <span class="btn-live-override-text">Override to 2x</span>
+        </button>
+      </div>
+      <p id="live-hint" class="live-hint">Live streams default to 1x to keep you in sync. Click override to apply your speed.</p>
     </div>
     <div class="footer">
       <button id="options-link" type="button" class="link-button">Exclusions…</button>
