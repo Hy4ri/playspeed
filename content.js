@@ -14,6 +14,40 @@
   let settingsLoaded = false;
   let settingsApplyPending = false;
 
+  let bridgeIntervalId = null;
+  let urlPollIntervalId = null;
+
+  function isContextInvalidated() {
+    try {
+      if (typeof chrome === 'undefined' || !chrome.runtime) return true;
+      const id = chrome.runtime.id;
+      if (!id) return true;
+      chrome.runtime.getURL(''); // test call
+      return false;
+    } catch (e) {
+      return true;
+    }
+  }
+
+  function cleanupContext() {
+    if (bridgeIntervalId) {
+      clearInterval(bridgeIntervalId);
+      bridgeIntervalId = null;
+    }
+    if (urlPollIntervalId) {
+      clearInterval(urlPollIntervalId);
+      urlPollIntervalId = null;
+    }
+    try {
+      observer.disconnect();
+    } catch (e) {}
+    try {
+      if (typeof ytPlayerObserver !== 'undefined' && ytPlayerObserver) {
+        ytPlayerObserver.disconnect();
+      }
+    } catch (e) {}
+  }
+
   // Per-instance token used to authenticate postMessage from yt-bridge.
   // Without this, any page script could spoof `playspeed-yt-live` messages.
   const BRIDGE_TOKEN = 'ps-' + Math.random().toString(36).slice(2) + '-' + Date.now().toString(36);
@@ -176,31 +210,39 @@
   function setupYouTubeBridge() {
     try {
       if (!location.hostname.includes('youtube.com')) return;
+
+      if (isContextInvalidated()) {
+        cleanupContext();
+        return;
+      }
+
+      // Defer injection until document.documentElement exists (it always does
+      // at document_idle, but be defensive).
+      const root = document.documentElement;
+      if (!root) return;
+
+      const script = document.createElement('script');
+      // Pass the auth token via URL query string AND dataset — the bridge reads
+      // both, falling back gracefully. URL is the most reliable for
+      // dynamically-inserted external scripts (document.currentScript can be
+      // unreliable in some engines).
+      const bridgeUrl = chrome.runtime.getURL('yt-bridge.js');
+      script.src = bridgeUrl + '?t=' + encodeURIComponent(BRIDGE_TOKEN);
+      script.dataset.psToken = BRIDGE_TOKEN;
+      script.onload = () => {
+        script.remove();
+      };
+      script.onerror = () => {
+        script.remove();
+        console.warn('[PlaySpeed] yt-bridge.js failed to load — YouTube live detection may be unreliable (CSP?).');
+      };
+      root.appendChild(script);
     } catch (e) {
-      return;
+      console.warn('[PlaySpeed] setupYouTubeBridge error:', e);
+      if (isContextInvalidated()) {
+        cleanupContext();
+      }
     }
-
-    // Defer injection until document.documentElement exists (it always does
-    // at document_idle, but be defensive).
-    const root = document.documentElement;
-    if (!root) return;
-
-    const script = document.createElement('script');
-    // Pass the auth token via URL query string AND dataset — the bridge reads
-    // both, falling back gracefully. URL is the most reliable for
-    // dynamically-inserted external scripts (document.currentScript can be
-    // unreliable in some engines).
-    const bridgeUrl = chrome.runtime.getURL('yt-bridge.js');
-    script.src = bridgeUrl + '?t=' + encodeURIComponent(BRIDGE_TOKEN);
-    script.dataset.psToken = BRIDGE_TOKEN;
-    script.onload = () => {
-      script.remove();
-    };
-    script.onerror = () => {
-      script.remove();
-      console.warn('[PlaySpeed] yt-bridge.js failed to load — YouTube live detection may be unreliable (CSP?).');
-    };
-    root.appendChild(script);
   }
 
   // Bridge retry: ytInitialPlayerResponse may not be ready on first inject
@@ -210,14 +252,21 @@
     const delays = [500, 1500, 3000, 6000];
     for (const delay of delays) {
       setTimeout(() => {
+        if (isContextInvalidated()) {
+          cleanupContext();
+          return;
+        }
         setupYouTubeBridge();
       }, delay);
     }
     // Ongoing periodic re-check every 10s — premieres can transition from
     // VOD → live → VOD, and we want to catch these changes.
-    if (!window.__psBridgeInterval) {
-      window.__psBridgeInterval = true;
-      setInterval(() => {
+    if (!bridgeIntervalId) {
+      bridgeIntervalId = setInterval(() => {
+        if (isContextInvalidated()) {
+          cleanupContext();
+          return;
+        }
         if (location.hostname.includes('youtube.com')) {
           setupYouTubeBridge();
         }
@@ -503,6 +552,10 @@
   let lastUrl = location.href;
 
   function onUrlChange() {
+    if (isContextInvalidated()) {
+      cleanupContext();
+      return;
+    }
     if (location.href === lastUrl) return;
     lastUrl = location.href;
     ytLiveFromPageData = false;
@@ -544,7 +597,13 @@
   // YouTube's canonical SPA navigation event
   window.addEventListener('yt-navigate-finish', onUrlChange);
   // Fallback: poll location.href every 1s in case the above miss something.
-  setInterval(onUrlChange, 1000);
+  urlPollIntervalId = setInterval(() => {
+    if (isContextInvalidated()) {
+      cleanupContext();
+      return;
+    }
+    onUrlChange();
+  }, 1000);
 
   // Initial load: settings FIRST, then bridge (avoids race where bridge
   // fires applySpeedToAll with default currentSpeed=1.0).
@@ -556,6 +615,10 @@
 
   // React to storage changes from other contexts (e.g., options page or popup)
   chrome.storage.onChanged.addListener((changes, area) => {
+    if (isContextInvalidated()) {
+      cleanupContext();
+      return;
+    }
     if (area !== 'local') return;
 
     let changed = false;
