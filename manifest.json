@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "PlaySpeed",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "Force all HTML video and audio players to play at your chosen speed. Full exclusion list for specific websites.",
   "author": "Hy4ri",
   "homepage_url": "https://github.com/Hy4ri/playspeed",

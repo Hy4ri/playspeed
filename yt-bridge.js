@@ -1,14 +1,8 @@
-// PlaySpeed — YouTube Page Data Bridge
+// PlaySpeed — YouTube Page Data & Player Bridge
 // Injected as an external <script> to run in the page's MAIN world.
-// Reads ytInitialPlayerResponse (inaccessible from content script's isolated world)
-// and communicates via postMessage (reliably crosses the boundary).
+// Reads YouTube player API data (#movie_player) and communicates via postMessage.
 
 (function() {
-  // The content script sets the auth token via a URL query string (?t=...)
-  // and also via a data-ps-token attribute on the <script> element. We read
-  // both and echo whichever we find back in the postMessage so the content
-  // script can verify the message came from our bridge and not from a
-  // third-party page script.
   var token = '';
   try {
     var currentScript = document.currentScript;
@@ -24,13 +18,58 @@
     }
   } catch (e) {}
 
-  function send(isLive, isPremiere) {
+  function sendLiveStatus() {
+    var isLive = false;
+    var isPremiere = false;
+    var videoId = '';
+
+    try {
+      var mp = document.getElementById('movie_player');
+      if (mp) {
+        if (typeof mp.getVideoData === 'function') {
+          var vd = mp.getVideoData();
+          if (vd && vd.video_id) {
+            videoId = vd.video_id;
+            isLive = !!(vd.isLive || vd.isWindowedLive);
+            isPremiere = !!vd.isPremiere;
+          }
+        }
+        if (!videoId && typeof mp.getPlayerResponse === 'function') {
+          var pr = mp.getPlayerResponse();
+          if (pr && pr.videoDetails && pr.videoDetails.videoId) {
+            var vdDetails = pr.videoDetails;
+            videoId = vdDetails.videoId;
+            isLive = !!(vdDetails.isLive || vdDetails.isLiveDvrEnabled);
+            isPremiere = !!vdDetails.isPremiere;
+          }
+        }
+      }
+
+      if (!isLive) {
+        var flexy = document.querySelector('ytd-watch-flexy');
+        if (flexy) {
+          if (!videoId) videoId = flexy.getAttribute('video-id') || '';
+          if (flexy.hasAttribute('is-live-stream') || flexy.hasAttribute('live-stream')) {
+            isLive = true;
+          }
+        }
+        var liveBadge = document.querySelector('.ytp-live-badge');
+        if (liveBadge && liveBadge.offsetParent !== null && window.getComputedStyle(liveBadge).display !== 'none') {
+          isLive = true;
+        }
+        if (mp && mp.classList.contains('ytp-live')) {
+          isLive = true;
+        }
+      }
+    } catch (e) {}
+
     try {
       window.postMessage(
         {
           type: 'playspeed-yt-live',
           isLive: !!isLive,
           isPremiere: !!isPremiere,
+          videoId: videoId || '',
           token: token
         },
         window.location.origin
@@ -38,40 +77,13 @@
     } catch (e) {}
   }
 
-  try {
-    var data = window.ytInitialPlayerResponse;
-    if (!data || !data.videoDetails) {
-      send(false, false);
-      return;
-    }
+  // Initial check
+  sendLiveStatus();
 
-    var vd = data.videoDetails;
-    // isLive: stream is currently broadcasting
-    // isLiveDvrEnabled: live DVR (can seek behind live edge)
-    // isPremiere: scheduled premiere — starts as VOD countdown, becomes live
-    //             at scheduled time, then becomes VOD again after ending.
-    var isLive = !!(vd.isLive === true || vd.isLiveDvrEnabled === true);
-    var isPremiere = !!vd.isPremiere;
+  // Listen for YouTube SPA navigation & state events
+  window.addEventListener('yt-navigate-finish', sendLiveStatus);
+  window.addEventListener('popstate', sendLiveStatus);
 
-    // Premiere that has gone live: treat as live so speed is capped.
-    // We can detect this via the playability status or duration.
-    if (isPremiere && !isLive) {
-      // Check if the premiere is currently in its live phase by looking at
-      // the streamingData — premieres in live phase have live stream data.
-      try {
-        if (data.streamingData && data.streamingData.dashManifestUrl) {
-          // DASH manifest with "live" in the URL indicates live phase
-          var dashUrl = data.streamingData.dashManifestUrl;
-          if (dashUrl.indexOf('/manifest/') !== -1 &&
-              (dashUrl.indexOf('live') !== -1 || dashUrl.indexOf('oc=') !== -1)) {
-            isLive = true;
-          }
-        }
-      } catch (e) {}
-    }
-
-    send(isLive, isPremiere);
-  } catch(e) {
-    send(false, false);
-  }
+  // Poll every 1s to catch dynamic transitions (e.g., premiere going live or player init)
+  setInterval(sendLiveStatus, 1000);
 })();
